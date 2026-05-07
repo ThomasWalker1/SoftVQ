@@ -1,4 +1,4 @@
-# Generalized Neural Activation Patterns and Applications
+# Soft Vector Quantization via Entropy Regularized Neural Activation Patterns
 
 Use the `heatmaps.ipynb` notebook to recreate fig 1.
 
