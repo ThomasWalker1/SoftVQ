@@ -65,6 +65,21 @@ def dynamics(out):
                 f.write(f"{max(r['step'], 1)}," + ','.join(vals) + f',{d.mean():.4f},{d.std(ddof=1):.4f}\n')
 
 
+def invariance(out):
+    for fn in glob.glob(os.path.join(RUNS, 'sim_results', 'invariance_*.json')):
+        arch = os.path.basename(fn)[len('invariance_'):-5]
+        rows = json.load(open(fn))['per_sigma']
+        keys = [k for k in rows[0] if k not in ('sigma',)]
+        with open(os.path.join(out, f'invariance_{arch}.csv'), 'w') as f:
+            f.write('sigma,' + ','.join(f'{k},{k}_std' for k in keys) + '\n')
+            for r in rows:
+                vals = []
+                for k in keys:
+                    a = np.array(r[k])
+                    vals += [f'{a.mean():.6f}', f'{a.std(ddof=1):.6f}']
+                f.write(f"{r['sigma']}," + ','.join(vals) + '\n')
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--paper', default=os.path.expanduser('~/SoftVQ-paper/data'))
@@ -72,6 +87,7 @@ def main():
     pretrained(a.paper)
     specificity(a.paper)
     dynamics(a.paper)
+    invariance(a.paper)
 
 
 if __name__ == '__main__':
