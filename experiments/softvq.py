@@ -18,13 +18,13 @@ def disable_inplace_relu(model):
 
 
 class PreactRecorder:
-    """Records the input to every nn.ReLU call, in call order (a module may be called twice)."""
+    """Records the input to every activation-module call (default nn.ReLU), in call order."""
 
-    def __init__(self, model):
+    def __init__(self, model, acts=(nn.ReLU,)):
         disable_inplace_relu(model)
         self.pre, self.post = [], []
         self.handles = [m.register_forward_hook(self._hook)
-                        for m in model.modules() if isinstance(m, nn.ReLU)]
+                        for m in model.modules() if isinstance(m, acts)]
 
     def _hook(self, module, inputs, output):
         self.pre.append(inputs[0].detach().flatten(1))
@@ -39,10 +39,10 @@ class PreactRecorder:
 
 
 @torch.no_grad()
-def collect(model, x, batch_size=250):
-    """Per-ReLU-layer preactivations and activations for probe inputs x (lists of (n, D_l) tensors)."""
+def collect(model, x, batch_size=250, acts=(nn.ReLU,)):
+    """Per-activation-layer preactivations and activations for probe inputs x (lists of (n, D_l) tensors)."""
     model.eval()
-    rec = PreactRecorder(model)
+    rec = PreactRecorder(model, acts)
     pre, post = None, None
     for i in range(0, len(x), batch_size):
         rec.clear()
