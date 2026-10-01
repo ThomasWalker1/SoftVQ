@@ -77,8 +77,8 @@ def main():
     for run in sorted(glob.glob(os.path.join(a.runs, '*', a.ckpt))):
         name = os.path.basename(os.path.dirname(run))
         key = f'{name}/{a.ckpt}'
-        if key in results:
-            continue
+        if key in results or not os.path.exists(os.path.join(os.path.dirname(run), 'results.json')):
+            continue  # done already, or training not finished
         student = load(run)
         row = {'run': name, 'ckpt': a.ckpt, **similarities(features(student, x), T)}
         student.with_features = False
