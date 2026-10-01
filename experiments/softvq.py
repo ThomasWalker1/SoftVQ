@@ -117,3 +117,29 @@ def gram_rbf(X, frac=0.5):
 
 def cka(Ga, Gb):
     return cosine(center(Ga), center(Gb))
+
+
+def colnorm(X):
+    """Divide each feature (column) by its norm over the inputs: invariant to positive rescaling."""
+    X = X.double()
+    return X / (X.norm(dim=0, keepdim=True) + 1e-12)
+
+
+def gram_colnorm_linear(X):
+    """Linear Gram of column-normalized features (rescaling-invariant CKA baseline)."""
+    Xn = colnorm(X)
+    return Xn @ Xn.T
+
+
+def gram_max(X, chunk=256):
+    """Max kernel of GReLU-CKA (mu-CKA, Godfrey et al., 2022): rows centered, columns normalized,
+    K_ij = max_k x_ik x_jk. Not positive semidefinite in general."""
+    X = X.double()
+    X = colnorm(X - X.mean(0, keepdim=True)).float()
+    n = X.shape[0]
+    K = torch.full((n, n), -float('inf'), device=X.device)
+    for j in range(0, X.shape[1], chunk):
+        c = X[:, j:j + chunk]
+        K = torch.maximum(K, (c[:, None, :] * c[None, :, :]).amax(-1))
+    return K.double()
+

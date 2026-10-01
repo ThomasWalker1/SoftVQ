@@ -19,7 +19,7 @@ import re
 
 import torch
 
-from softvq import center, collect, cosine, gram_linear, gram_rbf, vq_kernels
+from softvq import center, collect, cosine, gram_colnorm_linear, gram_linear, gram_max, gram_rbf, vq_kernels
 from train_cifar import ARCHS, load_cifar10
 
 SPEC_CONFIGS = [(b, n) for b in (0.5, 0.8, 0.9, 0.95, 1.0) for n in (False, True) if not (b == 1.0 and n)]
@@ -30,7 +30,9 @@ def measures(model, x, configs):
     """Per-layer centered Gram-type matrices for every measure (all moved to CPU, float64)."""
     pre, post = collect(model, x)
     out = {'cka_linear': [center(gram_linear(h)).cpu() for h in post],
-           'cka_rbf': [center(gram_rbf(h)).cpu() for h in post]}
+           'cka_rbf': [center(gram_rbf(h)).cpu() for h in post],
+           'cka_colnorm': [center(gram_colnorm_linear(h)).cpu() for h in post],
+           'mu_cka': [center(gram_max(h)).cpu() for h in post]}
     for b, nrm in configs:
         Ks = vq_kernels(pre, b, nrm)
         tag = f'b{b}' + ('_norm' if nrm else '')
