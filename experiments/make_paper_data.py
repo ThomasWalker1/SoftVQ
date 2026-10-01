@@ -80,6 +80,23 @@ def invariance(out):
                 f.write(f"{r['sigma']}," + ','.join(vals) + '\n')
 
 
+def gauge(out):
+    for fn in glob.glob(os.path.join(RUNS, 'sim_results', 'gauge_cka_plaincnn_b*.json')):
+        tag = os.path.basename(fn)[len('gauge_cka_plaincnn_'):-5]
+        res = json.load(open(fn))['results']
+        L = len(res[0]['layers'])
+        with open(os.path.join(out, f'gauge_plaincnn_{tag}.csv'), 'w') as f:
+            keys = ['cka_orig', 'cka_min', 'cka_max', 'vq_norm_b0.8']
+            f.write('layer,' + ','.join(f'{k},{k}_std' for k in keys) + ',n_pairs,max_logit_diff\n')
+            for l in range(L):
+                vals = []
+                for k in keys:
+                    a = np.array([r['layers'][l][k] for r in res])
+                    vals += [f'{a.mean():.4f}', f'{a.std(ddof=1) if len(a) > 1 else 0:.4f}']
+                diff = max(r['max_logit_diff_min'] for r in res)
+                f.write(f'{l + 1},' + ','.join(vals) + f',{len(res)},{diff:.2e}\n')
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--paper', default=os.path.expanduser('~/SoftVQ-paper/data'))
@@ -88,6 +105,7 @@ def main():
     specificity(a.paper)
     dynamics(a.paper)
     invariance(a.paper)
+    gauge(a.paper)
 
 
 if __name__ == '__main__':
