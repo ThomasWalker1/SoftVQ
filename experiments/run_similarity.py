@@ -44,6 +44,25 @@ def measures(model, x, configs):
     return out
 
 
+def rescale_plaincnn(model, sigma, seed):
+    """Function-preserving positive rescaling of every hidden channel of a PlainCNN:
+    conv_l output channel j scaled by c_j ~ logNormal(0, sigma), consumer weights by 1/c_j."""
+    import copy
+    m = copy.deepcopy(model)
+    g = torch.Generator().manual_seed(seed)
+    convs = [l for l in m.features if isinstance(l, torch.nn.Conv2d)]
+    with torch.no_grad():
+        for i, conv in enumerate(convs):
+            c = torch.exp(sigma * torch.randn(conv.out_channels, generator=g)).to(conv.weight.device)
+            conv.weight.mul_(c.view(-1, 1, 1, 1))
+            conv.bias.mul_(c)
+            if i + 1 < len(convs):
+                convs[i + 1].weight.div_(c.view(1, -1, 1, 1))
+            else:  # flatten is channel-major
+                m.fc.weight.div_(c.repeat_interleave(m.fc.in_features // conv.out_channels).view(1, -1))
+    return m
+
+
 def sim_matrix(A, B):
     return torch.tensor([[cosine(a, b) for b in B] for a in A])
 
@@ -66,7 +85,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--arch', default='resnet18')
     p.add_argument('--seeds', default='0-9')
-    p.add_argument('--mode', choices=['specificity', 'dynamics'], default='specificity')
+    p.add_argument('--mode', choices=['specificity', 'dynamics', 'invariance'], default='specificity')
     p.add_argument('--n', type=int, default=500)
     p.add_argument('--runs', default=os.path.expanduser('~/softvq_runs/sim'))
     p.add_argument('--out', default=os.path.expanduser('~/softvq_runs/sim_results'))
@@ -95,6 +114,24 @@ def main():
                          'mean_sim_matrix': torch.stack(mats).mean(0).tolist()}
             print(f'{name:28s} specificity {res[name]["accuracy_mean"]:.3f}', flush=True)
         fn = f'specificity_{a.arch}.json'
+    elif a.mode == 'invariance':
+        assert a.arch == 'plaincnn'
+        res = {'sigmas': [0.0, 0.25, 0.5, 1.0, 2.0], 'per_sigma': []}
+        for sigma in res['sigmas']:
+            row = {'sigma': sigma}
+            for s in seeds:
+                base = load_model(a.arch, ckpts(s)[-1])
+                resc = rescale_plaincnn(base, sigma, seed=1000 + s)
+                with torch.no_grad():
+                    diff = (base.eval()(x[:200]) - resc.eval()(x[:200])).abs().max().item()
+                Mb, Mr = measures(base, x, SPEC_CONFIGS), measures(resc, x, SPEC_CONFIGS)
+                for name in [k for k in Mb if not k.startswith('_')]:
+                    v = sum(cosine(u, w) for u, w in zip(Mb[name], Mr[name])) / len(Mb[name])
+                    row.setdefault(name, []).append(v)
+                row.setdefault('max_logit_diff', []).append(diff)
+            res['per_sigma'].append(row)
+            print(json.dumps({k: (sum(v) / len(v) if isinstance(v, list) else v) for k, v in row.items()}), flush=True)
+        fn = f'invariance_{a.arch}.json'
     else:
         steps = [int(re.search(r'step(\d+)', f).group(1)) for f in ckpts(seeds[0])]
         res = {'steps': steps, 'per_step': []}
