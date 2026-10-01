@@ -8,10 +8,20 @@ import torch
 import torch.nn as nn
 
 
+def disable_inplace_relu(model):
+    """In-place ReLUs overwrite their input before forward hooks run, so a hook would see
+    rectified values instead of preactivations. Switch them off (function unchanged)."""
+    for m in model.modules():
+        if isinstance(m, nn.ReLU):
+            m.inplace = False
+    return model
+
+
 class PreactRecorder:
     """Records the input to every nn.ReLU call, in call order (a module may be called twice)."""
 
     def __init__(self, model):
+        disable_inplace_relu(model)
         self.pre, self.post = [], []
         self.handles = [m.register_forward_hook(self._hook)
                         for m in model.modules() if isinstance(m, nn.ReLU)]
@@ -56,11 +66,16 @@ def codes(z, beta, normalize=False):
 
 
 def l1_kernel(c, chunk=8192):
-    """Pairwise l1 distances between rows of c, accumulated over feature chunks (float64)."""
+    """Pairwise l1 distances between rows of c.
+
+    Each feature chunk is computed in float32 (entries are in [0, 1], so a chunk sum is at most
+    `chunk`) and accumulated in float64; FP64 cdist is ~30x slower on consumer/Turing GPUs.
+    """
     n = c.shape[0]
     K = torch.zeros(n, n, dtype=torch.float64, device=c.device)
+    c = c.float()
     for j in range(0, c.shape[1], chunk):
-        K += torch.cdist(c[:, j:j + chunk].double(), c[:, j:j + chunk].double(), p=1)
+        K += torch.cdist(c[:, j:j + chunk], c[:, j:j + chunk], p=1).double()
     return K
 
 

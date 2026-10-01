@@ -17,13 +17,14 @@ import torch.nn as nn
 import torchvision
 from PIL import Image
 
-from softvq import center, codes, cosine, l1_kernel, vq_alignment
+from softvq import center, codes, cosine, disable_inplace_relu, l1_kernel, vq_alignment
 
 CONFIGS = [(b, nrm) for b in (0.5, 0.8, 0.9, 1.0) for nrm in (False, True)]
 
 
 class KernelAccumulator:
     def __init__(self, model):
+        disable_inplace_relu(model)
         self.K = {c: 0 for c in CONFIGS}
         self.G_all = 0
         self.handles = [m.register_forward_hook(self._hook) for m in model.modules() if isinstance(m, nn.ReLU)]
