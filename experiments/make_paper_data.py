@@ -97,6 +97,40 @@ def gauge(out):
                 f.write(f'{l + 1},' + ','.join(vals) + f',{len(res)},{diff:.2e}\n')
 
 
+def resolution(out):
+    for fn in glob.glob(os.path.join(RUNS, 'sim_results', 'resolution_*.json')):
+        arch = os.path.basename(fn)[len('resolution_'):-5]
+        rows = json.load(open(fn))['per_n']
+        keys = [k for k in rows[0] if k != 'n']
+        with open(os.path.join(out, f'resolution_{arch}.csv'), 'w') as f:
+            f.write('n,' + ','.join(f'{k},{k}_sem' for k in keys) + '\n')
+            for r in rows:
+                vals = []
+                for k in keys:
+                    a = np.array(r[k]['all'])
+                    vals += [f'{a.mean():.4f}', f'{a.std(ddof=1) / np.sqrt(len(a)):.4f}']
+                f.write(f"{r['n']}," + ','.join(vals) + '\n')
+
+
+def toy_inactive(out):
+    fn = os.path.join(RUNS, 'sim_results', 'toy_inactive.json')
+    if not os.path.exists(fn):
+        return
+    rows = json.load(open(fn))['rows']
+    keys = ['rel_param_change', 'cka_linear', 'cka_colnorm', 'mu_cka', 'vq_b1.0', 'vq_b0.8_norm']
+    eps = sorted({r['eps'] for r in rows})
+    for kind in ('inactive', 'random'):
+        with open(os.path.join(out, f'toy_{kind}.csv'), 'w') as f:
+            f.write('eps,' + ','.join(f'{k},{k}_dissim' for k in keys) + '\n')
+            for e in eps:
+                rs = [r for r in rows if r['kind'] == kind and r['eps'] == e]
+                vals = []
+                for k in keys:
+                    m = float(np.mean([r[k] for r in rs]))
+                    vals += [f'{m:.6g}', f'{max(1 - m, 1e-12):.6g}']
+                f.write(f'{e},' + ','.join(vals) + '\n')
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--paper', default=os.path.expanduser('~/SoftVQ-paper/data'))
@@ -106,6 +140,8 @@ def main():
     dynamics(a.paper)
     invariance(a.paper)
     gauge(a.paper)
+    resolution(a.paper)
+    toy_inactive(a.paper)
 
 
 if __name__ == '__main__':
